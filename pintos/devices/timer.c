@@ -18,11 +18,11 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
-struct wake_up_sema
+struct wake_up
 {
 	int64_t start_tick;
 	int64_t target_tick;
-	struct semaphore* sema;
+	struct thread* thread;
 	struct list_elem elem;
 };
 
@@ -98,18 +98,16 @@ int64_t timer_elapsed (int64_t then) {
 /* 약 TICKS개의 타이머 틱 동안 실행을 중단한다. */
 void timer_sleep (int64_t ticks) {
 	
-	struct semaphore sleep_sema;
-	struct wake_up_sema sema;
+	struct wake_up sema;
 	sema.start_tick = timer_ticks();
 	sema.target_tick = ticks;
-	sema_init(&sleep_sema, 0);
-	sema.sema = &sleep_sema;
 	enum intr_level old_val = intr_disable();	
+	sema.thread = thread_current();
 	list_push_back(&wake_up_list, &sema.elem);
-	intr_set_level(old_val);
 	
+	thread_block();
+	intr_set_level(old_val);
 	ASSERT (intr_get_level () == INTR_ON);
-	sema_down(sema.sema);
 }
 
 /* 약 MS밀리초 동안 실행을 중단한다. */
@@ -139,13 +137,12 @@ static void timer_interrupt (struct intr_frame *args UNUSED) {
 
 	for(struct list_elem* for_elem = list_begin(&wake_up_list); for_elem != list_end(&wake_up_list); for_elem = list_next(for_elem))
 	{
-		struct wake_up_sema* data = list_entry(for_elem, struct wake_up_sema, elem);
+		struct wake_up* data = list_entry(for_elem, struct wake_up, elem);
 		if(timer_ticks() - data->start_tick >= data->target_tick)
 		{
-			sema_up(data->sema);
-
 			enum intr_level old_val = intr_disable();
 			list_remove(&data->elem);
+			thread_unblock(data->thread);
 			intr_set_level(old_val);
 		}
 	}
