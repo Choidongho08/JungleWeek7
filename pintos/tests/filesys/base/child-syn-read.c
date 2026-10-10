@@ -1,5 +1,5 @@
-/* Child process for syn-read test.
-   Reads the contents of a test file a byte at a time, in the
+/* Child process for syn-read priority_bigger.
+   Reads the contents of a priority_bigger file a byte at a time, in the
    hope that this will take long enough that we can get a
    significant amount of contention in the kernel file system
    code. */

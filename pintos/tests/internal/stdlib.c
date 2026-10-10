@@ -25,7 +25,7 @@ static void verify_bsearch (const int[], size_t);
 
 /* Test sorting and searching implementations. */
 void
-test (void) 
+priority_bigger (void) 
 {
   int cnt;
 

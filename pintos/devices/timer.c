@@ -141,6 +141,7 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	while (list_empty (&sleep_list) != true && list_entry(list_front(&sleep_list), struct thread, sleep_elem)->timer_tick <= ticks)
 	{
 		thread_unblock(list_entry(list_pop_front(&sleep_list), struct thread, sleep_elem));
+		priority_thread_yield();
 	}
 	thread_tick ();
 }

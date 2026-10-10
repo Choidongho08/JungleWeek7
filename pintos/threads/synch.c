@@ -51,7 +51,7 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		list_push_back (&sema->waiters, &thread_current()->elem);
 		thread_block ();
 	}
 	sema->value--;
@@ -79,6 +79,14 @@ sema_try_down (struct semaphore *sema) {
 	return success;
 }
 
+bool priority_bigger (const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+	const int a_pri = list_entry(a, struct thread, elem)->priority;
+	const int b_pri = list_entry(b, struct thread, elem)->priority;
+
+	return a_pri < b_pri;
+}
+
 /* 세마포어의 up 또는 V 연산이다. SEMA 값을 1 증가시키고, 기다리는 스레드가 있으면 하나를 깨운다. 인터럽트 핸들러에서도 호출할 수 있다. */
 void
 sema_up (struct semaphore *sema) {
@@ -88,9 +96,14 @@ sema_up (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	if (!list_empty (&sema->waiters))
-		thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
+	{
+		struct list_elem* list_elem = list_max(&sema->waiters, &priority_bigger, NULL);
+		list_remove(list_elem);
+		thread_unblock(list_entry(list_elem, struct thread, elem));
+	}
 	sema->value++;
 	intr_set_level (old_level);
+	priority_thread_yield();
 }
 
 static void sema_test_helper (void *sema_);
@@ -182,6 +195,7 @@ lock_held_by_current_thread (const struct lock *lock) {
 struct semaphore_elem {
 	struct list_elem elem;              /* 목록 요소. */
 	struct semaphore semaphore;         /* 이 세마포어. */
+	struct thread* wait_thread;
 };
 
 /* 조건 변수 COND를 초기화한다. 조건 변수는 한 코드가 조건을 알리고, 이에 협력하는 다른 코드가 신호를 받아 동작하도록 한다. */
@@ -191,6 +205,8 @@ cond_init (struct condition *cond) {
 
 	list_init (&cond->waiters);
 }
+
+struct  thread* last_cond_thread;
 
 /* LOCK을 원자적으로 해제하고 다른 코드가 COND에 신호를 보낼 때까지 기다린다. 신호를 받은 뒤 반환하기 전에 LOCK을 다시 획득한다. 이 함수를 호출하기 전에 LOCK을 보유하고 있어야 한다. 이 함수가 구현하는 모니터는 Hoare 방식이 아닌 Mesa 방식이다. 즉, 신호를 보내는 것과 받는 것이 원자적이지 않다. 따라서 일반적으로 대기가 끝난 뒤 호출자가 조건을 다시 확인하고, 필요하면 다시 기다려야 한다. 하나의 조건 변수는 하나의 잠금에만 연결되지만, 하나의 잠금은 여러 조건 변수와 연결될 수 있다. 즉 잠금과 조건 변수는 일대다 관계다. 이 함수는 잠들 수 있으므로 인터럽트 핸들러 안에서 호출하면 안 된다. 인터럽트가 꺼진 상태에서 호출할 수 있지만, 잠들어야 하면 인터럽트가 다시 켜진다. */
 void
@@ -203,10 +219,19 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
+	waiter.wait_thread = thread_current();
 	list_push_back (&cond->waiters, &waiter.elem);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
+}
+
+bool sema_priority_bigger (const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+	const int a_pri = list_entry(a, struct semaphore_elem, elem)->wait_thread->priority;
+	const int b_pri = list_entry(b, struct semaphore_elem, elem)->wait_thread->priority;
+
+	return a_pri < b_pri;
 }
 
 /* LOCK으로 보호되는 COND를 기다리는 스레드가 있으면 그중 하나에 신호를 보내 대기에서 깨어나게 한다. 이 함수를 호출하기 전에 LOCK을 보유해야 한다. 인터럽트 핸들러는 잠금을 획득할 수 없으므로, 인터럽트 핸들러 안에서 조건 변수에 신호를 보내는 것은 적절하지 않다. */
@@ -218,8 +243,13 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	if (!list_empty (&cond->waiters))
-		sema_up (&list_entry (list_pop_front (&cond->waiters),
-					struct semaphore_elem, elem)->semaphore);
+	{
+		struct list_elem* max_elem = list_max(&cond->waiters, &sema_priority_bigger, NULL);
+		list_remove(max_elem);
+		struct semaphore_elem* sema_elem = list_entry(max_elem, struct semaphore_elem, elem);
+		
+		sema_up(&sema_elem->semaphore);
+	}
 }
 
 /* LOCK으로 보호되는 COND를 기다리는 스레드가 있으면 모두 깨운다. 이 함수를 호출하기 전에 LOCK을 보유해야 한다. 인터럽트 핸들러는 잠금을 획득할 수 없으므로, 인터럽트 핸들러 안에서 조건 변수에 신호를 보내는 것은 적절하지 않다. */

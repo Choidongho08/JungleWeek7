@@ -14,12 +14,11 @@
 
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PINTOS="$ROOT/pintos"
 GROUP="${1:-alarm}"
 LOG="/tmp/check-make.log"
 
-source "$PINTOS/activate"
-cd "$PINTOS/threads" || exit 1
+source "$ROOT/activate"
+cd "$ROOT/threads" || exit 1
 
 echo "== make =="
 if ! make >"$LOG" 2>&1; then

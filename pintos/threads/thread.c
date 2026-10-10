@@ -66,6 +66,7 @@ static void schedule (void);
 static tid_t allocate_tid (void);
 
 static bool priority_sort(const struct list_elem *,const struct list_elem *, void *aux UNUSED);
+void priority_thread_yield(void);
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -210,6 +211,7 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+	priority_thread_yield();
 
 	return tid;
 }
@@ -316,6 +318,7 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	priority_thread_yield();
 }
 
 /* Returns the current thread's priority. */
@@ -593,12 +596,34 @@ allocate_tid (void) {
 	return tid;
 }
 
-
 static bool priority_sort(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED)
 {
 	int64_t a_priority = list_entry(a, struct thread, elem)->priority;
 	int64_t b_priority = list_entry(b, struct thread, elem)->priority;
 
-	if (a_priority > b_priority) return true;
+	if (a_priority > b_priority)
+		return true;
 	return false;
+}
+
+void priority_thread_yield(void)
+{
+	enum intr_level old = intr_disable();
+	if(list_empty(&ready_list))
+	{
+		intr_set_level(old);
+		return;
+	}
+
+	struct thread* curr = thread_current();
+	struct thread* other = list_entry(list_front(&ready_list), struct thread, elem);
+	
+	if(other->priority > curr->priority)
+	{
+		if(intr_context())
+			intr_yield_on_return();
+		else
+			thread_yield();
+	}
+	intr_set_level(old);
 }

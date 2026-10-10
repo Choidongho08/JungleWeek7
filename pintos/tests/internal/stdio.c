@@ -42,7 +42,7 @@ checkf (const char *expect, const char *format, ...)
 
 /* Test printf() implementation. */
 void
-test (void) 
+priority_bigger (void) 
 {
   printf ("Testing formats:");
 

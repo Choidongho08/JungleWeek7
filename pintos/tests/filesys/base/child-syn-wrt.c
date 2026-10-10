@@ -1,5 +1,5 @@
-/* Child process for syn-read test.
-   Writes into part of a test file.  Other processes will be
+/* Child process for syn-read priority_bigger.
+   Writes into part of a priority_bigger file.  Other processes will be
    writing into other parts at the same time. */
 
 #include <random.h>

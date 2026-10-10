@@ -33,7 +33,7 @@ static void verify_list_bkwd (struct list *, int size);
 
 /* Test the linked list implementation. */
 void
-test (void) 
+priority_bigger (void) 
 {
   int size;
 
