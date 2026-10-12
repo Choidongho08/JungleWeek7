@@ -182,9 +182,9 @@ lock_acquire (struct lock *lock) {
 		list_push_back(&lock->holder->donate_list, &d->elem);
 	}
 	intr_set_level(old);
-	sema_down (&lock->semaphore);
+	sema_down(&lock->semaphore);
 	lock->holder = thread_current();
-	lock->holder->donate.wait_lock = NULL;
+	lock->holder->donate.wait_lock = NULL; // 락을 얻었기 때문에 더 이상 기다리는 락이 없다고 표시.
 }
 
 /* LOCK 획득을 시도한다. 성공하면 true, 실패하면 false를 반환한다. 현재 스레드가 이미 이 잠금을 보유한 상태여서는 안 된다. 이 함수는 잠들지 않으므로 인터럽트 핸들러 안에서도 호출할 수 있다. */
