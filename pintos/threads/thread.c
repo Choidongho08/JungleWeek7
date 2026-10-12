@@ -69,6 +69,8 @@ bool priority_sort(const struct list_elem *,const struct list_elem *, void *aux 
 
 void thread_preemption(void);
 
+void priority_thread_yield(void);
+
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -212,7 +214,7 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
-	thread_preemption();
+	priority_thread_yield();
 
 	return tid;
 }
@@ -332,26 +334,26 @@ thread_set_priority (int new_priority) {
         }
     }
 
-    thread_preemption ();
+    priority_thread_yield ();
 }
 
 // ready_list의 첫번째 요소(ready_list중 가장 우선순위가 높은 요소)와 실행중인 스레드를 비교하여
 // ready_list의 첫번째 요소가 더 우선순위가 높다면 바꿔주기
-void
-thread_preemption (void) {
-    if (intr_context ()) {
-        return;
-    }
+// void
+// thread_preemption (void) {
+//     if (intr_context ()) {
+//         return;
+//     }
 
-    if (list_empty (&ready_list)) {
-        return;
-    }
+//     if (list_empty (&ready_list)) {
+//         return;
+//     }
 
-    struct thread *highest = list_entry (list_begin (&ready_list), struct thread, elem);
+//     struct thread *highest = list_entry (list_begin (&ready_list), struct thread, elem);
 
-    if (thread_current ()->priority < highest->priority) thread_yield ();
+//     if (thread_current ()->priority < highest->priority) thread_yield ();
 
-}
+// }
 
 
 /* Returns the current thread's priority. */
@@ -642,4 +644,26 @@ bool priority_sort(const struct list_elem *a,const struct list_elem *b, void *au
 
 	if (a_priority > b_priority) return true;
 	return false;
+}
+
+void priority_thread_yield(void)
+{
+	enum intr_level old = intr_disable();
+	if(list_empty(&ready_list))
+	{
+		intr_set_level(old);
+		return;
+	}
+
+	struct thread* curr = thread_current();
+	struct thread* other = list_entry(list_front(&ready_list), struct thread, elem);
+	
+	if(other->priority > curr->priority)
+	{
+		if(intr_context())
+			intr_yield_on_return();
+		else
+			thread_yield();
+	}
+	intr_set_level(old);
 }

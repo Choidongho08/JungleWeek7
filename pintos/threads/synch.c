@@ -44,7 +44,7 @@
 bool cond_sort(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED);
 bool donate_priority_sort(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED);
 bool nest_donation (struct thread *t);
-
+bool sema_priority_bigger (const struct list_elem *a, const struct list_elem *b, void *aux);
 
 void
 sema_init (struct semaphore *sema, unsigned value) {
@@ -129,7 +129,7 @@ sema_up (struct semaphore *sema) {
 
 	intr_set_level (old_level);			// 인터럽트 복원
 
-	thread_preemption();			// waiters에 있던 스레드가 현재 실행중인 스레드의 우선순위보다 높을 수 있음 
+	priority_thread_yield();			// waiters에 있던 스레드가 현재 실행중인 스레드의 우선순위보다 높을 수 있음 
 
 }
 
@@ -320,6 +320,7 @@ lock_held_by_current_thread (const struct lock *lock) {
 struct semaphore_elem {
 	struct list_elem elem;              /* List element. */
 	struct semaphore semaphore;         /* This semaphore. */
+	struct thread* wait_thread;
 };
 
 /* Initializes condition variable COND.  A condition variable
@@ -361,6 +362,8 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
+	waiter.wait_thread = thread_current();
+
 	sema_init (&waiter.semaphore, 0);
 
 	list_push_back (&cond->waiters, &waiter.elem);
@@ -386,11 +389,15 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
-	if (!list_empty (&cond->waiters))
-		// cond->waiters 정렬 필요
-		list_sort(&cond->waiters,cond_sort,NULL);
-		sema_up (&list_entry (list_pop_front (&cond->waiters),
-					struct semaphore_elem, elem)->semaphore);
+	if (!list_empty (&cond->waiters)){
+		struct list_elem* max_elem = list_max(&cond->waiters, &sema_priority_bigger, NULL);
+		
+		list_remove(max_elem);
+		
+		struct semaphore_elem* sema_elem = list_entry(max_elem, struct semaphore_elem, elem);
+		
+		sema_up(&sema_elem->semaphore);
+	}
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -408,24 +415,24 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 		cond_signal (cond, lock);
 }
 
-bool cond_sort(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED){
+// bool cond_sort(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED){
 
-	// 이미 알고 있는 elem의 주소(a)를 바탕으로
-	// elem을 품고 있는 semaphore_elem 구조체 본체의 맨 앞 시작 주소를 역산해서 sa에 저장
-	struct semaphore_elem *sa = list_entry (a, struct semaphore_elem, elem);
-    struct semaphore_elem *sb = list_entry (b, struct semaphore_elem, elem);
+// 	// 이미 알고 있는 elem의 주소(a)를 바탕으로
+// 	// elem을 품고 있는 semaphore_elem 구조체 본체의 맨 앞 시작 주소를 역산해서 sa에 저장
+// 	struct semaphore_elem *sa = list_entry (a, struct semaphore_elem, elem);
+//     struct semaphore_elem *sb = list_entry (b, struct semaphore_elem, elem);
 
-	// 각 세마포어(sa, sb) 대기열에서 각각 맨 앞 스레드 1개씩(총 2개) 스레드를 가져옴
-    struct thread *ta = list_entry (list_begin (&sa->semaphore.waiters), struct thread, elem);
-    struct thread *tb = list_entry (list_begin (&sb->semaphore.waiters), struct thread, elem);
+// 	// 각 세마포어(sa, sb) 대기열에서 각각 맨 앞 스레드 1개씩(총 2개) 스레드를 가져옴
+//     struct thread *ta = list_entry (list_begin (&sa->semaphore.waiters), struct thread, elem);
+//     struct thread *tb = list_entry (list_begin (&sb->semaphore.waiters), struct thread, elem);
 
-	// 앞 스레드가 우선순위가 높다면 그대로 두기
-	if(ta->priority > tb->priority) return true;
+// 	// 앞 스레드가 우선순위가 높다면 그대로 두기
+// 	if(ta->priority > tb->priority) return true;
 
-	// 뒤 스레드가 우선순위가 높다면 바꿔주기
-	else return false;
+// 	// 뒤 스레드가 우선순위가 높다면 바꿔주기
+// 	else return false;
 
-}
+// }
 
 bool donate_priority_sort(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED)
 {
@@ -434,4 +441,12 @@ bool donate_priority_sort(const struct list_elem *a,const struct list_elem *b, v
 
 	if (t_a->priority > t_b->priority) return true;
 	return false;
+}
+
+bool sema_priority_bigger (const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+	const int a_pri = list_entry(a, struct semaphore_elem, elem)->wait_thread->priority;
+	const int b_pri = list_entry(b, struct semaphore_elem, elem)->wait_thread->priority;
+
+	return a_pri < b_pri;
 }

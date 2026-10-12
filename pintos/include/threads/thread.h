@@ -29,7 +29,7 @@ typedef int tid_t;
 #define PRI_MAX 63                      /* Highest priority. */
 
 bool priority_sort(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED);
-void thread_preemption(void);
+void priority_thread_yield(void);
 
 /* A kernel thread or user process.
  *
