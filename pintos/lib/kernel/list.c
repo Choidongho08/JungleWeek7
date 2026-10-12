@@ -377,6 +377,10 @@ inplace_merge (struct list_elem *a0, struct list_elem *a1b0,
 /* Sorts LIST according to LESS given auxiliary data AUX, using a
    natural iterative merge sort that runs in O(n lg n) time and
    O(1) space in the number of elements in LIST. */
+
+// 사용법 : list_sort(정렬할_대상_리스트, 비교_함수_포인터, 추가_보조_인자)
+// 비교_함수_포인터 -> 두 원소(a,b)의 순서를 결정하는 bool 반환형 함수의 이름(a가 b보다 앞에 와야하는가? yes->True, no->False)
+// 추가_보조_인자 -> 비교 함수에 추가적인 데이터나 문맥 정보가 필요할 때 전달하는 포인터?
 void
 list_sort (struct list *list, list_less_func *less, void *aux) {
 	size_t output_run_cnt;        /* Number of runs output in current pass. */

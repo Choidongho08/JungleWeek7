@@ -65,7 +65,11 @@ static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
 
-static bool priority_sort(const struct list_elem *,const struct list_elem *, void *aux UNUSED);
+bool priority_sort(const struct list_elem *,const struct list_elem *, void *aux UNUSED);
+
+void thread_preemption(void);
+
+void priority_thread_yield(void);
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -210,6 +214,7 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+	priority_thread_yield();
 
 	return tid;
 }
@@ -315,8 +320,41 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+    struct thread *curr = thread_current ();
+
+    curr->my_priority = new_priority;
+
+    curr->priority = new_priority;
+
+    /* 기부받았다면, donation_list의 최고 우선순위와(donation_list의 첫번째 thread의 우선순위) 비교하여 더 큰 값 유지 */
+    if (!list_empty (&curr->donation_list)) {
+        int highest_donation = list_entry (list_begin (&curr->donation_list), struct thread, donation_elem)->priority;
+        if (highest_donation > curr->priority) {
+            curr->priority = highest_donation;
+        }
+    }
+
+    priority_thread_yield ();
 }
+
+// ready_list의 첫번째 요소(ready_list중 가장 우선순위가 높은 요소)와 실행중인 스레드를 비교하여
+// ready_list의 첫번째 요소가 더 우선순위가 높다면 바꿔주기
+// void
+// thread_preemption (void) {
+//     if (intr_context ()) {
+//         return;
+//     }
+
+//     if (list_empty (&ready_list)) {
+//         return;
+//     }
+
+//     struct thread *highest = list_entry (list_begin (&ready_list), struct thread, elem);
+
+//     if (thread_current ()->priority < highest->priority) thread_yield ();
+
+// }
+
 
 /* Returns the current thread's priority. */
 int
@@ -413,6 +451,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+
+	t->my_priority = priority;           // 원래 우선순위 백업 
+    t->lock_to_stop = NULL;              // 대기 중인 락 
+    list_init (&t->donation_list);       // 기부자 리스트 초기화
+
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -594,11 +637,33 @@ allocate_tid (void) {
 }
 
 
-static bool priority_sort(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED)
+bool priority_sort(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED)
 {
 	int64_t a_priority = list_entry(a, struct thread, elem)->priority;
 	int64_t b_priority = list_entry(b, struct thread, elem)->priority;
 
 	if (a_priority > b_priority) return true;
 	return false;
+}
+
+void priority_thread_yield(void)
+{
+	enum intr_level old = intr_disable();
+	if(list_empty(&ready_list))
+	{
+		intr_set_level(old);
+		return;
+	}
+
+	struct thread* curr = thread_current();
+	struct thread* other = list_entry(list_front(&ready_list), struct thread, elem);
+	
+	if(other->priority > curr->priority)
+	{
+		if(intr_context())
+			intr_yield_on_return();
+		else
+			thread_yield();
+	}
+	intr_set_level(old);
 }
