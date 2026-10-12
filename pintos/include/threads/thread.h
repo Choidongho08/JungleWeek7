@@ -28,6 +28,9 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+bool priority_sort(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED);
+void priority_thread_yield(void);
+
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -85,31 +88,21 @@ typedef int tid_t;
  * only because they are mutually exclusive: only a thread in the
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
-
-
-struct donate
-{
-	struct thread* donate_thread;
-	struct lock* wait_lock;
-	int priority;
-	struct list_elem elem; 
-};
-
 struct thread {
 	/* Owned by thread.c. */
 	tid_t tid;                          /* Thread identifier. */
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-	
+
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;
-	struct list_elem sleep_elem;/* List element. */
-	
-	// donate
-	struct donate donate; // 후원한 도네이트
-	struct list donate_list; // 후원받은 도네이트
-	int default_priority;                       /* Priority. */
+	struct list_elem sleep_elem;		/* List element(연결 리스트 형태). */
+
+	int my_priority;					// 내 우선순위 보존용
+	struct list donation_list;			// 기부받은 스레드 목록
+	struct lock *lock_to_stop;			// 어떤 lock때문에 멈춰 있는지
+	struct list_elem donation_elem;		// 다른 스레드의 기부해준 스레드 목록에 들어가기 위함 
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
