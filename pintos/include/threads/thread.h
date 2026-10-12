@@ -111,6 +111,9 @@ struct thread {
 	struct list donate_list; // 후원받은 도네이트
 	int default_priority;                       /* Priority. */
 
+	int nice;
+	int recent_cpu;
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */

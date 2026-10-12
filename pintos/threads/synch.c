@@ -210,14 +210,12 @@ lock_release (struct lock *lock) {
 	enum intr_level old = intr_disable();
 	if(lock->holder && !list_empty(&lock->holder->donate_list))
 	{
-		struct list_elem* t_d = NULL;
 		struct donate* m_d = NULL; 
 		for(struct list_elem* le = list_begin(&lock->holder->donate_list); le != list_end(&lock->holder->donate_list); le = list_next(le))
 		{
 			struct donate* d = list_entry(le, struct donate, elem);
 			if(d->wait_lock && d->wait_lock == lock)
 			{
-				t_d = le;
 				list_remove(le);
 			}
 			else if(!m_d || m_d->priority < d->priority)
