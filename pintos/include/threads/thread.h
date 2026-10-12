@@ -97,7 +97,12 @@ struct thread {
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;
-	struct list_elem sleep_elem;/* List element. */
+	struct list_elem sleep_elem;		/* List element(연결 리스트 형태). */
+
+	int my_priority;					// 내 우선순위 보존용
+	struct list donation_list;			// 기부받은 스레드 목록
+	struct lock *lock_to_stop;			// 어떤 lock때문에 멈춰 있는지
+	struct list_elem donation_elem;		// 다른 스레드의 기부해준 스레드 목록에 들어가기 위함 
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

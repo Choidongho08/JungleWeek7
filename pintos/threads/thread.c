@@ -318,8 +318,21 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
-	thread_preemption();
+    struct thread *curr = thread_current ();
+
+    curr->my_priority = new_priority;
+
+    curr->priority = new_priority;
+
+    /* 기부받았다면, donation_list의 최고 우선순위와(donation_list의 첫번째 thread의 우선순위) 비교하여 더 큰 값 유지 */
+    if (!list_empty (&curr->donation_list)) {
+        int highest_donation = list_entry (list_begin (&curr->donation_list), struct thread, donation_elem)->priority;
+        if (highest_donation > curr->priority) {
+            curr->priority = highest_donation;
+        }
+    }
+
+    thread_preemption ();
 }
 
 // ready_list의 첫번째 요소(ready_list중 가장 우선순위가 높은 요소)와 실행중인 스레드를 비교하여
@@ -436,6 +449,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+
+	t->my_priority = priority;           // 원래 우선순위 백업 
+    t->lock_to_stop = NULL;              // 대기 중인 락 
+    list_init (&t->donation_list);       // 기부자 리스트 초기화
+
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
