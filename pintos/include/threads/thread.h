@@ -104,6 +104,9 @@ struct thread {
 	struct lock *lock_to_stop;			// 어떤 lock때문에 멈춰 있는지
 	struct list_elem donation_elem;		// 다른 스레드의 기부해준 스레드 목록에 들어가기 위함 
 
+	int nice;
+	int recent_cpu;
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
