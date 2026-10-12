@@ -107,8 +107,8 @@ struct thread {
 	struct list_elem sleep_elem;/* List element. */
 	
 	// donate
-	struct donate donate;
-	struct list donate_list;
+	struct donate donate; // 후원한 도네이트
+	struct list donate_list; // 후원받은 도네이트
 	int default_priority;                       /* Priority. */
 
 #ifdef USERPROG

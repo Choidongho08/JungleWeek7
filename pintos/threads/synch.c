@@ -148,6 +148,19 @@ lock_init (struct lock *lock) {
 	sema_init (&lock->semaphore, 1);
 }
 
+void donate_reflection(struct thread* t, int max)
+{
+	// 재귀로
+	if(!t)
+		return;
+	max = t->priority > max ? t->priority : max;
+	t->priority = max;
+	t->donate.priority = max; // L(33) -> M(32) -> H(10) 이라면 H가 반환했을 때 기존에 후원기록엔 32로 적혀있기에 32를 넣었음. 하지만 33이 들어가야 하므로 후원기록도 max로 변경함.
+	if(!t->donate.wait_lock || !t->donate.wait_lock->holder)
+		return;
+	donate_reflection(t->donate.wait_lock->holder, max);
+}
+
 /* 필요한 경우 잠들며 LOCK을 획득한다. 현재 스레드가 이미 이 잠금을 보유한 상태여서는 안 된다. 이 함수는 잠들 수 있으므로 인터럽트 핸들러 안에서 호출하면 안 된다. 인터럽트가 꺼진 상태에서 호출할 수 있지만, 잠들어야 하면 인터럽트가 다시 켜진다. */
 void
 lock_acquire (struct lock *lock) {
@@ -164,13 +177,14 @@ lock_acquire (struct lock *lock) {
 		d->priority = d->donate_thread->priority;
 		if(lock->holder->priority < d->donate_thread->priority)
 		{
-			lock->holder->priority = d->donate_thread->priority;
+			donate_reflection(lock->holder, d->donate_thread->priority);
 		}
 		list_push_back(&lock->holder->donate_list, &d->elem);
 	}
 	intr_set_level(old);
 	sema_down (&lock->semaphore);
 	lock->holder = thread_current();
+	lock->holder->donate.wait_lock = NULL;
 }
 
 /* LOCK 획득을 시도한다. 성공하면 true, 실패하면 false를 반환한다. 현재 스레드가 이미 이 잠금을 보유한 상태여서는 안 된다. 이 함수는 잠들지 않으므로 인터럽트 핸들러 안에서도 호출할 수 있다. */
