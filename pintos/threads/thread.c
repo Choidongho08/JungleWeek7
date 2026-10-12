@@ -114,7 +114,7 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
-
+	
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
 	init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -182,8 +182,8 @@ thread_print_stats (void) {
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
 tid_t
-thread_create (const char *name, int priority,
-		thread_func *function, void *aux) {
+thread_create (const char *name, int priority, thread_func *function, void *aux)
+{
 	struct thread *t;
 	tid_t tid;
 
@@ -317,7 +317,10 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+	// thread_current ()->priority = new_priority; // priority는 다른 스레드의 의해 높은 우선순위로 변했을 가능성이 있음.
+	if(thread_current ()->priority == thread_current ()->default_priority)
+		thread_current ()->priority = new_priority;
+	thread_current ()->default_priority = new_priority;
 	priority_thread_yield();
 }
 
@@ -415,7 +418,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	t->default_priority = priority;
 	t->magic = THREAD_MAGIC;
+	list_init (&t->donate_list);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

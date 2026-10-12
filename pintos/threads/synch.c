@@ -148,15 +148,43 @@ lock_init (struct lock *lock) {
 	sema_init (&lock->semaphore, 1);
 }
 
+void donate_reflection(struct thread* t, int max)
+{
+	// 재귀로
+	if(!t)
+		return;
+	max = t->priority > max ? t->priority : max;
+	t->priority = max;
+	t->donate.priority = max; // L(33) -> M(32) -> H(10) 이라면 H가 반환했을 때 기존에 후원기록엔 32로 적혀있기에 32를 넣었음. 하지만 33이 들어가야 하므로 후원기록도 max로 변경함.
+	if(!t->donate.wait_lock || !t->donate.wait_lock->holder)
+		return;
+	donate_reflection(t->donate.wait_lock->holder, max);
+}
+
 /* 필요한 경우 잠들며 LOCK을 획득한다. 현재 스레드가 이미 이 잠금을 보유한 상태여서는 안 된다. 이 함수는 잠들 수 있으므로 인터럽트 핸들러 안에서 호출하면 안 된다. 인터럽트가 꺼진 상태에서 호출할 수 있지만, 잠들어야 하면 인터럽트가 다시 켜진다. */
 void
 lock_acquire (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
-	ASSERT (!lock_held_by_current_thread (lock));
+	ASSERT (!lock_held_by_current_thread(lock));
 
+	enum intr_level old = intr_disable();
+	if(!lock_held_by_current_thread(lock) && lock->holder)
+	{
+		struct donate* d = &thread_current()->donate;
+		d->donate_thread = thread_current();
+		d->wait_lock = lock;
+		d->priority = d->donate_thread->priority;
+		if(lock->holder->priority < d->donate_thread->priority)
+		{
+			donate_reflection(lock->holder, d->donate_thread->priority);
+		}
+		list_push_back(&lock->holder->donate_list, &d->elem);
+	}
+	intr_set_level(old);
 	sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+	lock->holder = thread_current();
+	lock->holder->donate.wait_lock = NULL;
 }
 
 /* LOCK 획득을 시도한다. 성공하면 true, 실패하면 false를 반환한다. 현재 스레드가 이미 이 잠금을 보유한 상태여서는 안 된다. 이 함수는 잠들지 않으므로 인터럽트 핸들러 안에서도 호출할 수 있다. */
@@ -169,7 +197,7 @@ lock_try_acquire (struct lock *lock) {
 
 	success = sema_try_down (&lock->semaphore);
 	if (success)
-		lock->holder = thread_current ();
+		lock->holder = thread_current();
 	return success;
 }
 
@@ -179,6 +207,32 @@ lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 
+	enum intr_level old = intr_disable();
+	if(lock->holder && !list_empty(&lock->holder->donate_list))
+	{
+		struct list_elem* t_d = NULL;
+		struct donate* m_d = NULL; 
+		for(struct list_elem* le = list_begin(&lock->holder->donate_list); le != list_end(&lock->holder->donate_list); le = list_next(le))
+		{
+			struct donate* d = list_entry(le, struct donate, elem);
+			if(d->wait_lock && d->wait_lock == lock)
+			{
+				t_d = le;
+				list_remove(le);
+			}
+			else if(!m_d || m_d->priority < d->priority)
+			{
+				m_d = d;
+			}
+		}
+		if(!m_d)
+			lock->holder->priority = lock->holder->default_priority;
+		else
+		{
+			lock->holder->priority = lock->holder->default_priority > m_d->priority ? lock->holder->default_priority : m_d->priority;
+		}
+	}
+	intr_set_level(old);
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
 }
@@ -194,8 +248,15 @@ lock_held_by_current_thread (const struct lock *lock) {
 /* 목록에 들어가는 세마포어 하나. */
 struct semaphore_elem {
 	struct list_elem elem;              /* 목록 요소. */
-	struct semaphore semaphore;         /* 이 세마포어. */
-	struct thread* wait_thread;
+	struct semaphore semaphore;         // 이 세마포어는 cond_wait를 호출한 스레드만 담기위한 세마포어임.
+	struct thread* wait_thread; // 스레드를 추가한 이유는 이 스레드가 잠들기 전에 세마포어안에 들어가지 못할 경우를 대비해서임.
+	// 세마포어도 사용한 이유는
+	/*
+	스레드만 있는 경우에
+		A가 잠들기 전 B가 해제하면 A는 신호를 놓치고 잠들게 됨.
+	대신 세마포어 넣으면
+		A가 잠들기 전 B가 해제했을 때 세마포어 값이 1이기(0이 기본값인 경우)떄문에 A가 잠들지 않고 넘어감.
+	*/
 };
 
 /* 조건 변수 COND를 초기화한다. 조건 변수는 한 코드가 조건을 알리고, 이에 협력하는 다른 코드가 신호를 받아 동작하도록 한다. */
