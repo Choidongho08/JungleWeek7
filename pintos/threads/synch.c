@@ -44,7 +44,7 @@
 bool cond_sort(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED);
 bool donate_priority_sort(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED);
 bool nest_donation (struct thread *t);
-bool sema_priority_bigger (const struct list_elem *a, const struct list_elem *b, void *aux);
+bool sema_priority_bigger (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 void
 sema_init (struct semaphore *sema, unsigned value) {
@@ -443,7 +443,7 @@ bool donate_priority_sort(const struct list_elem *a,const struct list_elem *b, v
 	return false;
 }
 
-bool sema_priority_bigger (const struct list_elem *a, const struct list_elem *b, void *aux)
+bool sema_priority_bigger (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
 	const int a_pri = list_entry(a, struct semaphore_elem, elem)->wait_thread->priority;
 	const int b_pri = list_entry(b, struct semaphore_elem, elem)->wait_thread->priority;
