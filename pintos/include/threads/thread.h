@@ -103,6 +103,10 @@ struct thread {
 	struct list donation_list;			// 기부받은 스레드 목록
 	struct lock *lock_to_stop;			// 어떤 lock때문에 멈춰 있는지
 	struct list_elem donation_elem;		// 다른 스레드의 기부해준 스레드 목록에 들어가기 위함 
+	
+	int nice;
+	int32_t recent_cpu;
+	struct list_elem all_thread_elem;
 
 	int nice;
 	int recent_cpu;
@@ -125,7 +129,7 @@ struct thread {
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
-extern bool thread_mlfqs;
+extern bool thread_mlfqs; // extern은 다른 파일에서도 접근할 변수를 나타냄. static은 이 파일 내부에서만 사용할 변수를 나타냄. (같이 사용하면 버그남)
 
 void thread_init (void);
 void thread_start (void);
@@ -153,6 +157,9 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+int get_ready_list_size(void);
+void thread_mlfqs_calculate(int ticks, int timer_freq);
 
 void do_iret (struct intr_frame *tf);
 
