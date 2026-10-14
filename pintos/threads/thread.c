@@ -120,7 +120,7 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
-	list_init (&all_thread_list);
+	list_init (&all_thread_list); // 전체 스레드 리스트 초기화
 	load_avg = 0;
 
 	/* Set up a thread structure for the running thread. */
@@ -406,37 +406,44 @@ int get_ready_list_size(void)
 	return list_size(&ready_list);
 }
 
-void thread_mlfqs_calculate(int ticks, int timer_freq)
+void thread_mlfqs_calculate(int ticks, int timer_freq) // 스레드 mlfqs 계산기
 {
-	if(thread_mlfqs)
+	if(thread_mlfqs) // mlfqs모드인지
 	{
-		if(idle_thread != thread_current())
+		if(idle_thread != thread_current()) // 아이들 스레드가 아니면
 		{
-			thread_current()->recent_cpu = fp_int_plus(thread_current()->recent_cpu, 1);
+			thread_current()->recent_cpu = fp_int_plus(thread_current()->recent_cpu, 1); // 현재 스레드의 recent_cpu++
 		}
-		if(ticks % timer_freq == 0)
+		if(ticks % timer_freq == 0) // 1초
 		{
-			load_avg = fp_mul((int_to_fp(59) / 60), load_avg) + (int_to_fp(1) / 60) * (get_ready_list_size() + (thread_current() == idle_thread ? 0 : 1));
+			load_avg = fp_mul((int_to_fp(59) / 60), load_avg) +
+					fp_int_mul((int_to_fp(1) / 60), 
+					(get_ready_list_size() + (thread_current() == idle_thread ? 0 : 1))); // 만약 현재 스레드가 idle스레드가 아니면 read_list + 1
+					// load_avg 구하는 공식: (59/60) * load_avg + (1/60) * ready_threads
 			for(struct list_elem* elem = list_begin(&all_thread_list); elem != list_end(&all_thread_list); elem = list_next(elem))
 			{
 				struct thread* t = list_entry(elem, struct thread, all_thread_elem);
 				if(t == idle_thread)
 					continue;
 				t->recent_cpu = fp_plus(fp_mul(fp_division(2*load_avg, fp_int_plus(2*load_avg, 1)), t->recent_cpu), int_to_fp(t->nice));
+				// 모든 스레드 recent_cpu재계산, 공식: (2*load_avg) / (2*load_avg + 1) * recent_cpu + nice
 			}
  		}
-		if(ticks % 4 == 0)
+		if(ticks % 4 == 0) // 4틱
 		{
 			for(struct list_elem* elem = list_begin(&all_thread_list); elem != list_end(&all_thread_list); elem = list_next(elem))
 			{
 				struct thread* t = list_entry(elem, struct thread, all_thread_elem);
 				if(t == idle_thread)
 					continue;
-				t->priority = fp_to_int_zero(fp_int_sub(fp_sub(int_to_fp(PRI_MAX), fp_int_division(t->recent_cpu, 4)), (t->nice * 2)));
-				t->priority = t->priority < PRI_MIN ? PRI_MIN : (t->priority > PRI_MAX ? PRI_MAX : t->priority);
+				t->priority = fp_to_int_zero(fp_int_sub( 
+					int_to_fp(PRI_MAX) - fp_int_division(t->recent_cpu, 4), 
+					(t->nice * 2)));
+					// 모든 스레드 priority 재계산, 공식: PRI_MAX - (recent_cpu / 4) - (nice * 2) 결과는 버림계산
+				t->priority = t->priority < PRI_MIN ? PRI_MIN : (t->priority > PRI_MAX ? PRI_MAX : t->priority); // 0~63으로 자르기
 			}
-			list_sort(&ready_list, &priority_sort, NULL);
-			priority_thread_yield();
+			list_sort(&ready_list, &priority_sort, NULL); // 재계산한 priority를 기준으로 readyList 정렬
+			priority_thread_yield(); // 스레드 양보
 		}
 	}
 }
@@ -521,6 +528,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 
 	if(thread_mlfqs)
 		list_push_back(&all_thread_list, &t->all_thread_elem);
+		// 스레드 초기화시 전체 스레드리스트에 push ( 메인 스레드 포함 )
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
